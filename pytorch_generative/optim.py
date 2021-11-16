@@ -69,3 +69,30 @@ class AdaBelief(optim.Optimizer):
                 ema_var_ = ema_var / (1 - beta2 ** state["step"])
 
                 aaram.data.addcdiv_(-ema_avg_, ema_var_.sqrt() + 1e-10, value=lr)
+
+
+class SGLD(optim.Optimizer):
+    """Stochastic Gradient Langevin Dynamics optimizer."""
+
+    def __init__(self, params, lr=1e-3):
+        """Initializes a new SGLD instance.
+
+        Args:
+            params: Iterable of parameters to optimize or dicts of parameter groups.
+            lr: The initial learning rate. Will be annealed towards 0 during training.
+        """
+        assert 0 <= lr, f"Invalid learning rate: {lr}"
+        super().__init__(params, dict(lr=lr))
+
+    def step(self):
+        for group in self.param_groups:
+            for param in group["params"]:
+                if param.grad is None:
+                    continue
+                if not len(self.state):
+                    self.state["step"] = 0
+                eps = group[lr] / (1 + self.state["step"])
+                self.state["step"] += 1
+                langevin_noise = torch.randn_like(param.grad.data) * eps
+                step = 0.5 * eps * param.grad.data + langevin_noise
+                param.data.add_(-step)
